@@ -1,0 +1,157 @@
+buildscript {
+    ext.kotlin_version = '1.1.2'
+    repositories {
+        maven { url 'http://clojars.org/repo' }
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'clojuresque:clojuresque-base:1.7.0'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+plugins {
+    id 'com.github.johnrengelman.shadow' version '1.2.3'
+    //id 'org.jetbrains.kotlin.jvm' version '$kotlin_version'
+}
+
+group = 'ru.acapella'
+
+defaultTasks 'clean', 'build', 'shadowJar'
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '3.2'
+}
+
+def getDate() {
+    def date = new Date()
+    def formattedDate = date.format('yyyyMMddHHmmss')
+    return formattedDate
+}
+
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'idea'
+    apply plugin: 'com.github.johnrengelman.shadow'
+    apply plugin: 'kotlin'
+
+    compileJava {
+        // Flags only works when forking and passing 'javac' as an executable
+        options.fork = true
+        options.forkOptions.executable = 'javac'
+
+        options.compilerArgs << '-Xdoclint:none'
+    }
+
+    [compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
+
+    repositories {
+        mavenCentral()
+        flatDir dirs: "../libs"
+    }
+
+    dependencies {
+        compile "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+        testCompile 'junit:junit:4.12'
+    }
+
+    idea {
+        module {
+            downloadJavadoc = true
+            downloadSources = true
+        }
+    }
+
+    sourceSets {
+        main {
+            java {
+                srcDirs = ['src']
+            }
+            resources {
+                srcDirs = ['res']
+            }
+        }
+
+        test {
+            java {
+                srcDirs = ['tests']
+            }
+            resources {
+                srcDirs = ['res', 'res-test']
+            }
+        }
+
+        main.java.srcDirs += 'src/main/kotlin'
+    }
+
+    task testJar(type: Jar, dependsOn: testClasses) {
+        baseName = "test-${project.archivesBaseName}"
+        from sourceSets.test.output
+    }
+
+    configurations {
+        tests
+    }
+
+    task copyDeps(type: Copy) {
+        from configurations.runtime
+        into 'lib'
+    }
+
+    task sourcesJar(type: Jar) {
+        classifier = 'sources'
+        from sourceSets.main.allSource
+    }
+
+    task javadocJar(type: Jar, dependsOn: javadoc) {
+        classifier = 'javadoc'
+        from javadoc.destinationDir
+    }
+
+    artifacts {
+        tests testJar
+    }
+
+    shadowJar {
+        classifier = null
+        version = null
+    }
+
+    jar {
+        baseName = project.hasProperty('name')
+        manifest {
+            attributes 'Build-Time': getDate()
+            attributes 'Built-By': System.getProperty('user.name')
+        }
+    }
+
+    test {
+        testLogging.showStandardStreams = true
+    }
+}
+
+def findFile(paths) {
+    for (p in paths) {
+        File res = file(p);
+        if (res.exists()) return res;
+    }
+
+    return null;
+}
+
+def findLibrary(String ... paths) {
+    def dirs = [
+        "/usr/lib/",
+        "/usr/lib64/",
+        "/local/lib/",
+        "/local/lib64/"
+    ]
+
+    for (p in paths) {
+        def f = findFile(dirs.collect { it + p + ".so" })
+        if (f != null)
+            return f;
+    }
+
+    throw new AssertionError("files not found: " + paths)
+}

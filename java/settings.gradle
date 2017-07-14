@@ -1,0 +1,2 @@
+include 'common', 'kv-api-aeron'
+project(":common").projectDir = file("../../ajrpc/common")
